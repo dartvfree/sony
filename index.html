@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>All-in-One IPTV Player</title>
+  
+  <!-- Video.js CSS -->
+  <link href="https://unpkg.com/video.js/dist/video-js.css" rel="stylesheet">
+  <!-- Plyr CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #000;
+      color: white;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+
+    h1 {
+      color: #fff;
+    }
+
+    #channel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 15px;
+      padding: 20px;
+      margin: 0 auto;
+      max-width: 1200px;
+    }
+
+    .channel-logo {
+      width: 100%;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+      transition: transform 0.3s ease;
+    }
+
+    .channel-logo:hover {
+      transform: scale(1.1);
+    }
+
+    .channel-info {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #fff;
+    }
+
+    #overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 10;
+    }
+
+    #player-popup {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: #333;
+      padding: 20px;
+      border-radius: 10px;
+      z-index: 20;
+      width: 80%;
+      max-width: 800px;
+      text-align: left;
+    }
+
+    #player-popup select {
+      margin: 10px 0;
+      padding: 10px;
+      font-size: 16px;
+      background-color: #444;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+
+    #close-button {
+      background-color: #ff4d4d;
+      border: none;
+      padding: 10px;
+      cursor: pointer;
+      color: white;
+      font-size: 18px;
+      border-radius: 5px;
+      transition: background-color 0.3s ease;
+    }
+
+    #close-button:hover {
+      background-color: #ff1a1a;
+    }
+
+    #player-container {
+      width: 100%;
+      height: 450px;
+    }
+
+    #player-popup iframe {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Twinkling background effect */
+    @keyframes twinkle {
+      0% { opacity: 0.5; }
+      50% { opacity: 1; }
+      100% { opacity: 0.5; }
+    }
+
+    .twinkle-bg {
+      animation: twinkle 1s infinite alternate;
+    }
+
+    /* Hover effect */
+    .channel-logo:hover {
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>IPTV Channels</h1>
+  <div id="channel-grid" class="twinkle-bg"></div>
+
+  <!-- Player Popup -->
+  <div id="overlay"></div>
+  <div id="player-popup">
+    <button id="close-button">Close</button>
+    <select id="player-select">
+      <option value="videojs">Video.js</option>
+      <option value="plyr">Plyr</option>
+      <option value="shaka">Shaka Player</option>
+      <option value="hlsjs">HLS.js</option>
+      <option value="dplayer">DPlayer</option>
+      <option value="clappr">Clappr</option>
+    </select>
+    <div id="player-container"></div>
+  </div>
+
+  <!-- External Libraries -->
+  <script src="https://unpkg.com/video.js/dist/video.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.2.0/shaka-player.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dplayer/dist/DPlayer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/clappr@latest/dist/clappr.min.js"></script>
+
+  <script>
+    const defaultPlaylistURL = 'https://raw.githubusercontent.com/SArun61/IPTV/refs/heads/main/SonyLiv.m3u';
+
+    async function loadPlaylist() {
+      const response = await fetch(defaultPlaylistURL);
+      const playlist = await response.text();
+      parsePlaylist(playlist);
+    }
+
+    function parsePlaylist(playlist) {
+      const channels = playlist.match(/#EXTINF:.*,\s*(.+)\n(.+)/g);
+      const grid = document.getElementById('channel-grid');
+
+      channels.forEach((channel) => {
+        const [, name, url] = channel.match(/#EXTINF:.*,\s*(.+)\n(.+)/);
+        const logo = channel.match(/tvg-logo="(.*?)"/)?.[1] || 'https://via.placeholder.com/100';
+
+        const channelElement = document.createElement('div');
+        channelElement.innerHTML = `
+          <img class="channel-logo" src="${logo}" alt="${name}" data-url="${url}" />
+          <p class="channel-info">${name}</p>
+        `;
+
+        channelElement.querySelector('.channel-logo').addEventListener('click', () => {
+          openPlayer(url);
+        });
+
+        grid.appendChild(channelElement);
+      });
+    }
+
+    function openPlayer(url) {
+      const popup = document.getElementById('player-popup');
+      const overlay = document.getElementById('overlay');
+      const container = document.getElementById('player-container');
+      const playerSelect = document.getElementById('player-select');
+
+      container.innerHTML = ''; // Clear previous player
+      popup.style.display = 'block';
+      overlay.style.display = 'block';
+
+      playerSelect.addEventListener('change', () => initializePlayer(playerSelect.value, url));
+      initializePlayer(playerSelect.value, url);
+    }
+
+    function initializePlayer(playerType, url) {
+      const container = document.getElementById('player-container');
+      container.innerHTML = ''; // Clear previous player
+
+      switch (playerType) {
+        case 'videojs':
+          container.innerHTML = '<video id="videojs-player" class="video-js vjs-default-skin" controls></video>';
+          const videojsPlayer = videojs('videojs-player', { autoplay: true });
+          videojsPlayer.src({ src: url, type: 'application/x-mpegURL' });
+          break;
+
+        case 'plyr':
+          const plyrVideo = document.createElement('video');
+          plyrVideo.id = 'plyr-player';
+          plyrVideo.controls = true;
+          container.appendChild(plyrVideo);
+          if (Hls.isSupported()) {
+            const hls = new Hls();
+            hls.loadSource(url);
+            hls.attachMedia(plyrVideo);
+          } else {
+            plyrVideo.src = url;
+          }
+          new Plyr(plyrVideo);
+          break;
+
+        case 'shaka':
+          const shakaVideo = document.createElement('video');
+          shakaVideo.controls = true;
+          container.appendChild(shakaVideo);
+          const shakaPlayer = new shaka.Player(shakaVideo);
+          shakaPlayer.load(url).catch(console.error);
+          break;
+
+        case 'hlsjs':
+          const hlsVideo = document.createElement('video');
+          hlsVideo.controls = true;
+          container.appendChild(hlsVideo);
+          const hls = new Hls();
+          hls.loadSource(url);
+          hls.attachMedia(hlsVideo);
+          break;
+
+        case 'dplayer':
+          container.innerHTML = '<div id="dplayer-container"></div>';
+          new DPlayer({ container: document.getElementById('dplayer-container'), video: { url } });
+          break;
+
+        case 'clappr':
+          const clapprContainer = document.createElement('div');
+          clapprContainer.id = 'clappr-container';
+          container.appendChild(clapprContainer);
+          new Clappr.Player({ source: url, parentId: '#clappr-container' });
+          break;
+
+        default:
+          console.log('Player type not supported');
+      }
+    }
+
+    document.getElementById('close-button').addEventListener('click', () => {
+      document.getElementById('overlay').style.display = 'none';
+      document.getElementById('player-popup').style.display = 'none';
+    });
+
+    loadPlaylist();
+  </script>
+</body>
+</html>
